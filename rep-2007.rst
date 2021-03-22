@@ -145,14 +145,17 @@ Type adaptation can be used with a client and service by creating a ``struct`` t
 
 .. code-block:: cpp
 
-   using MyAdaptedRequestType = TypeAdapter<std::string, std_msgs::msg::String>;
-   using MyAdaptedResponseType = TypeAdapter<bool, std_msgs::msg::Bool>;
+   // TODO note that we may need additional API to match the service type support to this custom type support
+   // TODO Make this example use service
+   using MyAdaptedRequestType = TypeAdapter<std::string, std_msgs::srv::String>;
+   using MyAdaptedResponseType = TypeAdapter<bool, std_msgs::srv::Trigger::Response>;
 
    struct MyServiceTypeAdapter {
       using Request = MyAdaptedRequestType;
       using Response = MyAdaptedResponseType;
    };
 
+   // TODO make a more complete example to show that the bool adapted type also works
    auto client = node->create_client<MyServiceTypeAdapter>("service");
    auto service = node->create_service<MyServiceTypeAdapter>(
      "service",
@@ -183,6 +186,7 @@ As with services, the ROS type for a request, feedback, or result can be specifi
       using Result = MyAdaptedResultType;
    };
 
+   // TODO make it more concrete with Fibonacci
    auto node = rclcpp::Node::make_shared("action_node");
    auto action_client = rclcpp_action::create_client<MyActionTypeAdapter>(node, "action");
    auto action_server = rclcpp_action::create_server<MyActionTypeAdapter>(
@@ -310,6 +314,10 @@ However, we believe that the concrete benefits for C++ currently outweigh the po
 For example, placing this feature in ``rclcpp`` allows us to avoid type erasure (which would be necessary to place this functionality into ``rcl``) and to use ownership mechanics (unique and shared pointer) to ensure it is safely implemented.
 Another added advantage of placing this feature in ``rclcpp`` is that it reduce the number of function calls and calls that potentially are to functions in separate shared libraries.
 
+.. todo::
+        
+        Pick a direction.
+
 Perhaps we can support a form of this feature in other languages in ``rcl`` or ``rmw`` in the future.
 One challenge in doing this is that it may require custom type support, which may be middleware specific.
 This possibility will be further explored in the future.
@@ -322,6 +330,10 @@ Similarly, it is preferable to specify the adapted type at instantiation for sub
 
 Comparison to ROS 1's Type Adaptation
 -------------------------------------
+
+.. todo::
+
+        Add the serialization functions.
 
 Although intended to be similar in functionality, the proposed feature and ROS 1's type adaptation support [5]_ have a few important differences:
 * This feature will support both convert and (de)serialize functions, and require at least one or the other, but also allow both. The reason for this is that convert is superior for intra-process communication and the (de)serialization functions are better for inter-process communication.
