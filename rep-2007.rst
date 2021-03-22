@@ -143,20 +143,68 @@ Type Adaptation in Services
 
 Type adaptation can be used with a client and service by creating a ``struct`` that defines a type adapter for the request and the response. For example:
 
+.. note::
+
+   We may need to add additional API to match the service type support to this custom type support.
+
 .. code-block:: cpp
 
-   using MyAdaptedRequestType = TypeAdapter<std::string, std_msgs::msg::String>;
-   using MyAdaptedResponseType = TypeAdapter<bool, std_msgs::msg::Bool>;
+   using SetBool = std_srvs::srv::SetBool;
 
-   struct MyServiceTypeAdapter {
-      using Request = MyAdaptedRequestType;
-      using Response = MyAdaptedResponseType;
+   struct MySetBoolResponse : SetBool::Response {
+     // From inheriting from SetBool::Response
+     // bool success;
+     // std::string message;
+
+     // This adapter has a custom convenience method
+     bool is_message_even_number_of_chars() {
+       return (message.size() % 2) == 0;
+     }
    };
 
-   auto client = node->create_client<MyServiceTypeAdapter>("service");
-   auto service = node->create_service<MyServiceTypeAdapter>(
-     "service",
-     [](const std::string & request) {...});
+   struct MySetBoolTypeAdapter {
+     using Request = TypeAdapter<bool, SetBool::Request>;
+
+     // We're only interested in the message part of response
+     using Response = TypeAdapter<MySetBoolResponse, SetBool::Response>;
+   };
+
+   auto node = rclcpp::Node::make_shared("service_node");
+   auto client = node->create_client<MySetBoolTypeAdapter>("set_bool");
+   auto service = node->create_service<MySetBoolTypeAdapter>(
+     "set_bool",
+      [](
+        const std::shared_ptr<rmw_request_id_t> request_header,
+        const std::shared_ptr<bool> request,
+        std::shared_ptr<MySetBoolResponse> response) -> void
+      {
+        (void)request_header;
+        response->success = response;
+        if (response->success == true) {
+          response->message = "123";
+        } else {
+          response->message = "1234";
+        }
+      });
+
+   while (!client->wait_for_service(1s)) {
+     if (!rclcpp::ok()) {
+       RCLCPP_ERROR(node->get_logger(), "Interrupted while waiting for the service. Exiting.");
+       return 0;
+     } 
+     RCLCPP_INFO(node->get_logger(), "service not available, waiting again...");
+   }
+   
+   auto request = true;
+   auto result = send_request(node, client, request);
+   if (result) {
+     RCLCPP_INFO_STREAM(node->get_logger(), 
+       "The message is an even number of chars: " << 
+       result->is_message_even_number_of_chars() ? "true" : "false");
+   } else {
+     RCLCPP_ERROR(node->get_logger(), "Interrupted while waiting for response. Exiting.");
+   }
+
 
 Similarly, either the request or response can be adapted:
 
@@ -183,6 +231,7 @@ As with services, the ROS type for a request, feedback, or result can be specifi
       using Result = MyAdaptedResultType;
    };
 
+   // TODO make it more concrete with Fibonacci
    auto node = rclcpp::Node::make_shared("action_node");
    auto action_client = rclcpp_action::create_client<MyActionTypeAdapter>(node, "action");
    auto action_server = rclcpp_action::create_server<MyActionTypeAdapter>(
@@ -310,6 +359,10 @@ However, we believe that the concrete benefits for C++ currently outweigh the po
 For example, placing this feature in ``rclcpp`` allows us to avoid type erasure (which would be necessary to place this functionality into ``rcl``) and to use ownership mechanics (unique and shared pointer) to ensure it is safely implemented.
 Another added advantage of placing this feature in ``rclcpp`` is that it reduce the number of function calls and calls that potentially are to functions in separate shared libraries.
 
+.. todo::
+        
+        Pick a direction.
+
 Perhaps we can support a form of this feature in other languages in ``rcl`` or ``rmw`` in the future.
 One challenge in doing this is that it may require custom type support, which may be middleware specific.
 This possibility will be further explored in the future.
@@ -322,6 +375,10 @@ Similarly, it is preferable to specify the adapted type at instantiation for sub
 
 Comparison to ROS 1's Type Adaptation
 -------------------------------------
+
+.. todo::
+
+        Add the serialization functions.
 
 Although intended to be similar in functionality, the proposed feature and ROS 1's type adaptation support [5]_ have a few important differences:
 * This feature will support both convert and (de)serialize functions, and require at least one or the other, but also allow both. The reason for this is that convert is superior for intra-process communication and the (de)serialization functions are better for inter-process communication.
