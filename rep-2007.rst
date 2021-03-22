@@ -143,23 +143,68 @@ Type Adaptation in Services
 
 Type adaptation can be used with a client and service by creating a ``struct`` that defines a type adapter for the request and the response. For example:
 
+.. note::
+
+   We may need to add additional API to match the service type support to this custom type support.
+
 .. code-block:: cpp
 
-   // TODO note that we may need additional API to match the service type support to this custom type support
-   // TODO Make this example use service
-   using MyAdaptedRequestType = TypeAdapter<std::string, std_msgs::srv::String>;
-   using MyAdaptedResponseType = TypeAdapter<bool, std_msgs::srv::Trigger::Response>;
+   using SetBool = std_srvs::srv::SetBool;
 
-   struct MyServiceTypeAdapter {
-      using Request = MyAdaptedRequestType;
-      using Response = MyAdaptedResponseType;
+   struct MySetBoolResponse : SetBool::Response {
+     // From inheriting from SetBool::Response
+     // bool success;
+     // std::string message;
+
+     // This adapter has a custom convenience method
+     bool is_message_even_number_of_chars() {
+       return (message.size() % 2) == 0;
+     }
    };
 
-   // TODO make a more complete example to show that the bool adapted type also works
-   auto client = node->create_client<MyServiceTypeAdapter>("service");
-   auto service = node->create_service<MyServiceTypeAdapter>(
-     "service",
-     [](const std::string & request) {...});
+   struct MySetBoolTypeAdapter {
+     using Request = TypeAdapter<bool, SetBool::Request>;
+
+     // We're only interested in the message part of response
+     using Response = TypeAdapter<MySetBoolResponse, SetBool::Response>;
+   };
+
+   auto node = rclcpp::Node::make_shared("service_node");
+   auto client = node->create_client<MySetBoolTypeAdapter>("set_bool");
+   auto service = node->create_service<MySetBoolTypeAdapter>(
+     "set_bool",
+      [](
+        const std::shared_ptr<rmw_request_id_t> request_header,
+        const std::shared_ptr<bool> request,
+        std::shared_ptr<MySetBoolResponse> response) -> void
+      {
+        (void)request_header;
+        response->success = response;
+        if (response->success == true) {
+          response->message = "123";
+        } else {
+          response->message = "1234";
+        }
+      });
+
+   while (!client->wait_for_service(1s)) {
+     if (!rclcpp::ok()) {
+       RCLCPP_ERROR(node->get_logger(), "Interrupted while waiting for the service. Exiting.");
+       return 0;
+     } 
+     RCLCPP_INFO(node->get_logger(), "service not available, waiting again...");
+   }
+   
+   auto request = true;
+   auto result = send_request(node, client, request);
+   if (result) {
+     RCLCPP_INFO_STREAM(node->get_logger(), 
+       "The message is an even number of chars: " << 
+       result->is_message_even_number_of_chars() ? "true" : "false");
+   } else {
+     RCLCPP_ERROR(node->get_logger(), "Interrupted while waiting for response. Exiting.");
+   }
+
 
 Similarly, either the request or response can be adapted:
 
